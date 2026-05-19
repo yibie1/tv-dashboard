@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
           cache: 'npm'
 
       - name: Setup Java 17
@@ -35,29 +35,73 @@ jobs:
         run: npm install -g expo-cli @expo/cli
 
       - name: Clean previous builds
-        run: |
-          rm -rf android
-          rm -rf ios
+        run: rm -rf android ios
 
-      - name: Run Expo Prebuild
+      - name: Generate Android project
         run: npx expo prebuild --platform android --clean
 
-      - name: Verify Android folder exists
-        run: ls -la android/
-
-      - name: Fix build.gradle files
+      - name: Fix Android configuration
         run: |
-          # Ensure app/build.gradle has complete configuration
+          # Create proper gradle.properties
+          cat > android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g
+          android.useAndroidX=true
+          android.enableJetifier=true
+          kotlinVersion=1.9.24
+          EOF
+          
+          # Fix root build.gradle
+          cat > android/build.gradle << 'EOF'
+          buildscript {
+              ext {
+                  buildToolsVersion = "34.0.0"
+                  minSdkVersion = 24
+                  compileSdkVersion = 34
+                  targetSdkVersion = 34
+                  kotlinVersion = "1.9.24"
+              }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath("com.android.tools.build:gradle:8.1.1")
+                  classpath("com.facebook.react:react-native-gradle-plugin")
+                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+              }
+          }
+          
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  mavenLocal()
+              }
+          }
+          EOF
+          
+          # Fix settings.gradle
+          cat > android/settings.gradle << 'EOF'
+          rootProject.name = 'Ethiopian TV Dashboard'
+          
+          apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle");
+          applyNativeModulesSettingsGradle(settings)
+          
+          include ':app'
+          includeBuild('../node_modules/@react-native/gradle-plugin')
+          EOF
+
+      - name: Create proper app/build.gradle
+        run: |
           cat > android/app/build.gradle << 'EOF'
           apply plugin: "com.android.application"
           apply plugin: "com.facebook.react"
           apply plugin: "org.jetbrains.kotlin.android"
           
           react {
-              entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry.js', rootDir.absolutePath, 'android')"].execute().text.trim())
-              reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute().text.trim()).getParentFile().getAbsoluteFile()
-              hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute().text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
-              codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json')"].execute().text.trim()).getParentFile().getAbsoluteFile()
+              hermesCommand = "../../node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc"
+              enableHermes = false
+              reactNativeDir = "../../node_modules/react-native"
           }
           
           android {
@@ -103,7 +147,6 @@ jobs:
                   release {
                       signingConfig signingConfigs.release
                       minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
                   }
               }
           }
@@ -113,44 +156,24 @@ jobs:
           }
           EOF
 
-      - name: Fix root build.gradle
-        run: |
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              ext {
-                  buildToolsVersion = "34.0.0"
-                  minSdkVersion = 24
-                  compileSdkVersion = 34
-                  targetSdkVersion = 34
-                  kotlinVersion = "1.9.24"
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath("com.android.tools.build:gradle:8.1.1")
-                  classpath("com.facebook.react:react-native-gradle-plugin")
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  mavenLocal()
-              }
-          }
-          EOF
-
       - name: Create debug keystore
         run: |
           cd android/app
-          if [ ! -f debug.keystore ]; then
-              keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, O=Android, C=US"
-          fi
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, O=Android, C=US" 2>/dev/null || true
           cd ../..
+
+      - name: Create index.android.bundle
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res || true
+          
+          # If index.js doesn't exist, create it
+          if [ ! -f index.js ]; then
+            echo "import 'expo-router/entry';" > index.js
+          fi
+          
+          # Generate bundle again with correct entry
+          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
