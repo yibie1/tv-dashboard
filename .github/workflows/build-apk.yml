@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Classic Expo Build
 
 on:
   push:
@@ -19,99 +19,27 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Clean and prebuild
-        run: |
-          rm -rf android ios
-          npx expo prebuild --platform android --clean
-          
-      - name: Fix Android configuration
-        run: |
-          # Create proper gradle.properties
-          cat > android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4g
-          android.useAndroidX=true
-          android.enableJetifier=true
-          kotlin.version=1.9.24
-          kotlinVersion=1.9.24
-          ndkVersion=26.1.10909125
-          EOF
-          
-          # Update root build.gradle
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              ext {
-                  buildToolsVersion = "34.0.0"
-                  minSdkVersion = 24
-                  compileSdkVersion = 34
-                  targetSdkVersion = 34
-                  kotlinVersion = "1.9.24"
-                  ndkVersion = "26.1.10909125"
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath("com.android.tools.build:gradle:8.1.1")
-                  classpath("com.facebook.react:react-native-gradle-plugin")
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24")
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  mavenLocal()
-              }
-          }
-          EOF
-          
-          # Update settings.gradle
-          cat > android/settings.gradle << 'EOF'
-          rootProject.name = 'Ethiopian TV Dashboard'
-          
-          dependencyResolutionManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  mavenLocal()
-              }
-          }
-          
-          apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
-          
-          include ':app'
-          includeBuild('../node_modules/@react-native/gradle-plugin')
-          EOF
-
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+      - name: Install Expo CLI
+        run: npm install -g expo-cli
 
       - name: Build APK
-        run: |
-          cd android
-          ./gradlew assembleRelease --no-daemon --stacktrace
+        run: expo build:android --non-interactive --type apk
         env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g"
+          EXPO_USERNAME: ${{ secrets.EXPO_USERNAME }}
+          EXPO_PASSWORD: ${{ secrets.EXPO_PASSWORD }}
+
+      - name: Download APK
+        run: |
+          expo build:android --non-interactive --download --output app.apk
+        env:
+          EXPO_USERNAME: ${{ secrets.EXPO_USERNAME }}
+          EXPO_PASSWORD: ${{ secrets.EXPO_PASSWORD }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ethiopian-tv-dashboard
-          path: android/app/build/outputs/apk/release/*.apk
+          path: app.apk
