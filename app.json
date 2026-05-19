@@ -25,7 +25,7 @@
         "android.permission.ACCESS_NETWORK_STATE"
       ]
     },
-    "plugins": [
+   "plugins": [
       "expo-router",
       "expo-av",
       [
@@ -45,7 +45,10 @@
             "targetSdkVersion": 35,
             "minSdkVersion": 24,
             "kotlinVersion": "1.9.24",
-            "enableProguardInReleaseBuilds": false
+            "enableProguardInReleaseBuilds": false,
+            "extraMavenRepos": [
+              "https://www.jetbrains.com/packages/"
+            ]
           }
         }
       ]

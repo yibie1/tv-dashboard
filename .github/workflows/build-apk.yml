@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [main]
-  workflow_dispatch: # allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
@@ -37,18 +37,50 @@ jobs:
       - name: Run Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Pin Kotlin version
+      - name: Force Kotlin version to 1.9.24
         run: |
-          sed -i 's/android.kotlinVersion=.*/android.kotlinVersion=1.9.24/' android/gradle.properties
-          grep -q 'android.kotlinVersion' android/gradle.properties || echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
-          # Also patch build.gradle fallback
-          sed -i "s/kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'/kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'/" android/build.gradle
+          # Update gradle.properties
+          sed -i 's/^kotlinVersion=.*/kotlinVersion=1.9.24/' android/gradle.properties || echo 'kotlinVersion=1.9.24' >> android/gradle.properties
+          sed -i 's/^android.kotlinVersion=.*/android.kotlinVersion=1.9.24/' android/gradle.properties || echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
+          
+          # Update root build.gradle
+          cat >> android/build.gradle << 'EOF'
+          
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('kotlin')) {
+                      project.ext.kotlinVersion = '1.9.24'
+                  }
+                  if (project.hasProperty('kotlinVersion')) {
+                      project.ext.kotlinVersion = '1.9.24'
+                  }
+              }
+          }
+          EOF
+          
+          # Update app/build.gradle
+          cat >> android/app/build.gradle << 'EOF'
+          
+          configurations.all {
+              resolutionStrategy {
+                  eachDependency { DependencyResolveDetails details ->
+                      if (details.requested.group == 'org.jetbrains.kotlin') {
+                          details.useVersion '1.9.24'
+                      }
+                  }
+              }
+          }
+          EOF
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
+      - name: Clean build
+        run: ./gradlew clean
+        working-directory: android
+
       - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
         working-directory: android
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
