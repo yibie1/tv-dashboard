@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Ethiopian TV Dashboard",
+    "slug": "ethiopian-tv-dashboard",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/images/icon.png",
+    "scheme": "ethiopiantv",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "platforms": ["android", "web"],
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "package": "com.ethiopiantv.dashboard",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-av",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/text.ttf",
+            "./assets/fonts/clock.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24,
+            "kotlinVersion": "1.9.24",
+            "enableProguardInReleaseBuilds": false
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "1da83bf5-9fbc-4f5d-a020-062ac2d17ac6"
+      }
+    }
+  }
+}

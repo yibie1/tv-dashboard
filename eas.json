@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 10.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "image": "ubuntu-22.04-jdk-17-ndk-r25b"
+      },
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle",
+        "image": "ubuntu-22.04-jdk-17-ndk-r25b"
+      },
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

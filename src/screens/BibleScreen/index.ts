@@ -1,0 +1,1 @@
+export { BibleScreen } from './BibleScreen';

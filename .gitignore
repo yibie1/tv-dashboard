@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+.pnp
+.pnp.js
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native builds
+android/
+ios/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# EAS
+.eas/
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# Environment variables — never commit these
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# TypeScript
+*.tsbuildinfo
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Test coverage
+coverage/
