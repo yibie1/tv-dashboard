@@ -38,9 +38,21 @@ jobs:
 
       - name: Pin Kotlin version
         run: |
-          sed -i 's/android.kotlinVersion=.*/android.kotlinVersion=1.9.24/' android/gradle.properties
-          grep -q 'android.kotlinVersion' android/gradle.properties || echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
-          sed -i "s/kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.25'/kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'/" android/build.gradle
+          # Force kotlin version in gradle.properties (remove old, append new)
+          grep -v 'android.kotlinVersion' android/gradle.properties > /tmp/gp.tmp && mv /tmp/gp.tmp android/gradle.properties
+          echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
+          # Patch the fallback in build.gradle
+          python3 -c "
+          import re
+          with open('android/build.gradle', 'r') as f:
+              c = f.read()
+          c = re.sub(r\"findProperty\('android\.kotlinVersion'\) \?:\s*'[^']+'\", \"findProperty('android.kotlinVersion') ?: '1.9.24'\", c)
+          with open('android/build.gradle', 'w') as f:
+              f.write(c)
+          "
+          echo '--- Kotlin check ---'
+          grep -i kotlin android/gradle.properties
+          grep -i kotlinVersion android/build.gradle
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
