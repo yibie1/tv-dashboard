@@ -37,6 +37,9 @@ jobs:
       - name: Run Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: Pin Kotlin version
+        run: sed -i 's/android.kotlinVersion=.*/android.kotlinVersion=1.9.24/' android/gradle.properties
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
