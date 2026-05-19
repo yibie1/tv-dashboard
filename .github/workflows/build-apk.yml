@@ -37,27 +37,38 @@ jobs:
       - name: Run Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Fix Kotlin version compatibility
+      - name: Fix Kotlin version and dependencies
         run: |
-          # Method 1: Force Kotlin version in gradle.properties
-          echo "kotlinVersion=1.9.24" >> android/gradle.properties
-          echo "android.kotlinVersion=1.9.24" >> android/gradle.properties
+          # Force Kotlin version to 1.9.24 in gradle.properties
+          cat >> android/gradle.properties << 'EOF'
+          kotlinVersion=1.9.24
+          android.kotlinVersion=1.9.24
+          kotlin.code.style=official
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m
+          EOF
           
-          # Method 2: Add resolution strategy to app/build.gradle
-          cat >> android/app/build.gradle << 'EOF'
-          
-          // Force Kotlin version
-          configurations.all {
-              resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-                  if (details.requested.group == 'org.jetbrains.kotlin') {
-                      details.useVersion '1.9.24'
-                  }
+          # Update root build.gradle to set Kotlin version
+          cat > android/build.gradle.new << 'EOF'
+          buildscript {
+              ext.kotlin_version = '1.9.24'
+              repositories {
+                  google()
+                  mavenCentral()
+                  maven { url 'https://www.jetbrains.com/packages/' }
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.1'
+                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
               }
           }
           EOF
           
-          # Method 3: Update root build.gradle to set Kotlin version before evaluation
-          sed -i '1i buildscript {\n    ext.kotlin_version = "1.9.24"\n}\n' android/build.gradle
+          # Append the rest of the original build.gradle
+          tail -n +$(grep -n "^allprojects" android/build.gradle | cut -d: -f1) android/build.gradle >> android/build.gradle.new
+          mv android/build.gradle.new android/build.gradle
+          
+          # Force Kotlin version in all modules
+          find android -name "build.gradle" -type f -exec sed -i '1i buildscript {\n    ext.kotlin_version = "1.9.24"\n}\n' {} \;
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
@@ -66,13 +77,22 @@ jobs:
         run: ./gradlew clean
         working-directory: android
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+      - name: Build Release APK with detailed logging
+        run: ./gradlew assembleRelease --no-daemon --stacktrace --info > build.log 2>&1 || (cat build.log && exit 1)
         working-directory: android
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
 
+      - name: Upload build log if failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: android/build.log
+          retention-days: 7
+
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ethiopian-tv-dashboard-release
