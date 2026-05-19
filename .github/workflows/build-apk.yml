@@ -37,40 +37,27 @@ jobs:
       - name: Run Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Force Kotlin version to 1.9.24
+      - name: Fix Kotlin version compatibility
         run: |
-          # Update gradle.properties
-          sed -i 's/^kotlinVersion=.*/kotlinVersion=1.9.24/' android/gradle.properties || echo 'kotlinVersion=1.9.24' >> android/gradle.properties
-          sed -i 's/^android.kotlinVersion=.*/android.kotlinVersion=1.9.24/' android/gradle.properties || echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
+          # Method 1: Force Kotlin version in gradle.properties
+          echo "kotlinVersion=1.9.24" >> android/gradle.properties
+          echo "android.kotlinVersion=1.9.24" >> android/gradle.properties
           
-          # Update root build.gradle
-          cat >> android/build.gradle << 'EOF'
-          
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('kotlin')) {
-                      project.ext.kotlinVersion = '1.9.24'
-                  }
-                  if (project.hasProperty('kotlinVersion')) {
-                      project.ext.kotlinVersion = '1.9.24'
-                  }
-              }
-          }
-          EOF
-          
-          # Update app/build.gradle
+          # Method 2: Add resolution strategy to app/build.gradle
           cat >> android/app/build.gradle << 'EOF'
           
+          // Force Kotlin version
           configurations.all {
-              resolutionStrategy {
-                  eachDependency { DependencyResolveDetails details ->
-                      if (details.requested.group == 'org.jetbrains.kotlin') {
-                          details.useVersion '1.9.24'
-                      }
+              resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+                  if (details.requested.group == 'org.jetbrains.kotlin') {
+                      details.useVersion '1.9.24'
                   }
               }
           }
           EOF
+          
+          # Method 3: Update root build.gradle to set Kotlin version before evaluation
+          sed -i '1i buildscript {\n    ext.kotlin_version = "1.9.24"\n}\n' android/build.gradle
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
