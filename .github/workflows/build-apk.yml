@@ -31,93 +31,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Clean and prebuild
+      - name: Build with Expo directly
         run: |
-          rm -rf android ios
-          npx expo prebuild --platform android --clean
-
-      - name: Fix Kotlin version conflict
-        run: |
-          # Force Kotlin 1.9.24 in gradle.properties
-          cat > android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4g
-          android.useAndroidX=true
-          android.enableJetifier=true
-          kotlinVersion=1.9.24
-          android.kotlinVersion=1.9.24
-          kotlin.code.style=official
-          # Suppress version compatibility check
-          kotlin.suppressKotlinVersionCompatibilityCheck=true
-          EOF
-          
-          # Update root build.gradle
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              ext {
-                  buildToolsVersion = "34.0.0"
-                  minSdkVersion = 24
-                  compileSdkVersion = 34
-                  targetSdkVersion = 34
-                  kotlinVersion = "1.9.24"
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath("com.android.tools.build:gradle:8.1.1")
-                  classpath("com.facebook.react:react-native-gradle-plugin")
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24")
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  mavenLocal()
-              }
-          }
-          EOF
-          
-          # Force Kotlin version in app/build.gradle
-          cat >> android/app/build.gradle << 'EOF'
-          
-          configurations.all {
-              resolutionStrategy {
-                  force "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
-                  force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24"
-                  force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24"
-                  force "org.jetbrains.kotlin:kotlin-reflect:1.9.24"
-                  force "org.jetbrains.kotlin:kotlin-stdlib-common:1.9.24"
-              }
-          }
-          
-          android {
-              kotlinOptions {
-                  jvmTarget = "17"
-                  freeCompilerArgs += ["-Xskip-metadata-version-check"]
-              }
-          }
-          EOF
-
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
-
-      - name: Build APK
-        run: |
-          cd android
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          npx expo run:android --variant release
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g"
-          ORG_GRADLE_PROJECT_kotlinVersion: "1.9.24"
-          ORG_GRADLE_PROJECT_android_kotlinVersion: "1.9.24"
 
-      - name: Upload APK
+      - name: Find and upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ethiopian-tv-dashboard
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/*.apk
