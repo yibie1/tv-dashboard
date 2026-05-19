@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Setup Java 17
@@ -31,162 +31,29 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Install Expo CLI
-        run: npm install -g expo-cli @expo/cli
+      - name: Run Expo Prebuild
+        run: npx expo prebuild --platform android --clean --no-install
+        env:
+          NODE_ENV: production
 
-      - name: Clean previous builds
-        run: rm -rf android ios
-
-      - name: Generate Android project
-        run: npx expo prebuild --platform android --clean
-
-      - name: Fix Android configuration
+      - name: Pin Kotlin version
         run: |
-          # Create proper gradle.properties
-          cat > android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4g
-          android.useAndroidX=true
-          android.enableJetifier=true
-          kotlinVersion=1.9.24
-          EOF
-          
-          # Fix root build.gradle
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              ext {
-                  buildToolsVersion = "34.0.0"
-                  minSdkVersion = 24
-                  compileSdkVersion = 34
-                  targetSdkVersion = 34
-                  kotlinVersion = "1.9.24"
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath("com.android.tools.build:gradle:8.1.1")
-                  classpath("com.facebook.react:react-native-gradle-plugin")
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  mavenLocal()
-              }
-          }
-          EOF
-          
-          # Fix settings.gradle
-          cat > android/settings.gradle << 'EOF'
-          rootProject.name = 'Ethiopian TV Dashboard'
-          
-          apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle");
-          applyNativeModulesSettingsGradle(settings)
-          
-          include ':app'
-          includeBuild('../node_modules/@react-native/gradle-plugin')
-          EOF
-
-      - name: Create proper app/build.gradle
-        run: |
-          cat > android/app/build.gradle << 'EOF'
-          apply plugin: "com.android.application"
-          apply plugin: "com.facebook.react"
-          apply plugin: "org.jetbrains.kotlin.android"
-          
-          react {
-              hermesCommand = "../../node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc"
-              enableHermes = false
-              reactNativeDir = "../../node_modules/react-native"
-          }
-          
-          android {
-              compileSdkVersion rootProject.ext.compileSdkVersion
-              buildToolsVersion rootProject.ext.buildToolsVersion
-              
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-              
-              kotlinOptions {
-                  jvmTarget = '17'
-              }
-              
-              defaultConfig {
-                  applicationId "com.ethiopiantv.dashboard"
-                  minSdkVersion rootProject.ext.minSdkVersion
-                  targetSdkVersion rootProject.ext.targetSdkVersion
-                  versionCode 1
-                  versionName "1.0.0"
-              }
-              
-              signingConfigs {
-                  debug {
-                      storeFile file('debug.keystore')
-                      storePassword 'android'
-                      keyAlias 'androiddebugkey'
-                      keyPassword 'android'
-                  }
-                  release {
-                      storeFile file('debug.keystore')
-                      storePassword 'android'
-                      keyAlias 'androiddebugkey'
-                      keyPassword 'android'
-                  }
-              }
-              
-              buildTypes {
-                  debug {
-                      signingConfig signingConfigs.debug
-                  }
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                  }
-              }
-          }
-          
-          dependencies {
-              implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
-          }
-          EOF
-
-      - name: Create debug keystore
-        run: |
-          cd android/app
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, O=Android, C=US" 2>/dev/null || true
-          cd ../..
-
-      - name: Create index.android.bundle
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res || true
-          
-          # If index.js doesn't exist, create it
-          if [ ! -f index.js ]; then
-            echo "import 'expo-router/entry';" > index.js
-          fi
-          
-          # Generate bundle again with correct entry
-          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+          sed -i 's/android.kotlinVersion=.*/android.kotlinVersion=1.9.24/' android/gradle.properties
+          grep -q 'android.kotlinVersion' android/gradle.properties || echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
+          sed -i "s/kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.25'/kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'/" android/build.gradle
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build APK
-        run: |
-          cd android
-          ./gradlew assembleRelease --no-daemon
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon
+        working-directory: android
         env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ethiopian-tv-dashboard
-          path: android/app/build/outputs/apk/release/*.apk
+          name: ethiopian-tv-dashboard-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
