@@ -29,43 +29,95 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
-      - name: Run Expo Prebuild
-        run: npx expo prebuild --platform android --clean --no-install
-        env:
-          NODE_ENV: production
-
-      - name: Pin Kotlin version
+      - name: Clean and prebuild
         run: |
-          # Force kotlin version in gradle.properties (remove old, append new)
-          grep -v 'android.kotlinVersion' android/gradle.properties > /tmp/gp.tmp && mv /tmp/gp.tmp android/gradle.properties
-          echo 'android.kotlinVersion=1.9.24' >> android/gradle.properties
-          # Patch the fallback in build.gradle
-          python3 -c "
-          import re
-          with open('android/build.gradle', 'r') as f:
-              c = f.read()
-          c = re.sub(r\"findProperty\('android\.kotlinVersion'\) \?:\s*'[^']+'\", \"findProperty('android.kotlinVersion') ?: '1.9.24'\", c)
-          with open('android/build.gradle', 'w') as f:
-              f.write(c)
-          "
-          echo '--- Kotlin check ---'
-          grep -i kotlin android/gradle.properties
-          grep -i kotlinVersion android/build.gradle
+          rm -rf android ios
+          npx expo prebuild --platform android --clean
+
+      - name: Fix Kotlin version conflict
+        run: |
+          # Force Kotlin 1.9.24 in gradle.properties
+          cat > android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g
+          android.useAndroidX=true
+          android.enableJetifier=true
+          kotlinVersion=1.9.24
+          android.kotlinVersion=1.9.24
+          kotlin.code.style=official
+          # Suppress version compatibility check
+          kotlin.suppressKotlinVersionCompatibilityCheck=true
+          EOF
+          
+          # Update root build.gradle
+          cat > android/build.gradle << 'EOF'
+          buildscript {
+              ext {
+                  buildToolsVersion = "34.0.0"
+                  minSdkVersion = 24
+                  compileSdkVersion = 34
+                  targetSdkVersion = 34
+                  kotlinVersion = "1.9.24"
+              }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath("com.android.tools.build:gradle:8.1.1")
+                  classpath("com.facebook.react:react-native-gradle-plugin")
+                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24")
+              }
+          }
+          
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  mavenLocal()
+              }
+          }
+          EOF
+          
+          # Force Kotlin version in app/build.gradle
+          cat >> android/app/build.gradle << 'EOF'
+          
+          configurations.all {
+              resolutionStrategy {
+                  force "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+                  force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24"
+                  force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24"
+                  force "org.jetbrains.kotlin:kotlin-reflect:1.9.24"
+                  force "org.jetbrains.kotlin:kotlin-stdlib-common:1.9.24"
+              }
+          }
+          
+          android {
+              kotlinOptions {
+                  jvmTarget = "17"
+                  freeCompilerArgs += ["-Xskip-metadata-version-check"]
+              }
+          }
+          EOF
+
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon
-        working-directory: android
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon --stacktrace
         env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g"
+          ORG_GRADLE_PROJECT_kotlinVersion: "1.9.24"
+          ORG_GRADLE_PROJECT_android_kotlinVersion: "1.9.24"
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ethiopian-tv-dashboard-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
+          name: ethiopian-tv-dashboard
+          path: android/app/build/outputs/apk/release/*.apk
